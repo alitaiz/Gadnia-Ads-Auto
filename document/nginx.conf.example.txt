@@ -1,0 +1,83 @@
+# ==============================================================================
+# ==               NGINX CONFIGURATION EXAMPLE FOR GADNIA ADS AUTO              ==
+# ==============================================================================
+# Hướng dẫn sử dụng:
+# 1. Sao chép (copy) TOÀN BỘ nội dung file này.
+# 2. Mở file cấu hình Nginx của bạn: sudo nano /etc/nginx/sites-available/gadnia.tababyco.com
+# 3. Xóa nội dung cũ và dán (paste) nội dung mới này vào.
+# 4. Thay thế "gadnia.tababyco.com" bằng tên miền của bạn.
+# 5. Đảm bảo đường dẫn trong "root" trỏ đúng đến thư mục "dist" của bạn.
+# 6. Lưu file, sau đó chạy `sudo nginx -t` và `sudo systemctl restart nginx`.
+# ==============================================================================
+
+# Khối 1: Chuyển hướng tất cả truy cập HTTP (cổng 80) sang HTTPS (cổng 443)
+# Đây là cấu hình được Certbot tự động tạo và là phương pháp tốt nhất cho bảo mật.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name gadnia.tababyco.com; # <-- THAY THẾ BẰNG TÊN MIỀN CỦA BẠN
+
+    # Chuyển hướng vĩnh viễn (301) đến phiên bản HTTPS của trang web
+    return 301 https://$host$request_uri;
+}
+
+# Khối 2: Cấu hình chính cho trang web, chạy trên HTTPS (cổng 443)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name gadnia.tababyco.com; # <-- THAY THẾ BẰNG TÊN MIỀN CỦA BẠN
+
+    # --- Cấu hình SSL (do Certbot quản lý) ---
+    ssl_certificate /etc/letsencrypt/live/gadnia.tababyco.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gadnia.tababyco.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # --- Cấu hình Frontend (React App) ---
+    # Đường dẫn đến thư mục chứa các file đã được build của frontend
+    root /var/www/Gadnia-Ads-Auto/dist; # <-- KIỂM TRA VÀ THAY THẾ BẰNG ĐƯỜNG DẪN ĐÚNG
+    index index.html;
+
+    # --- BẢO MẬT: Bật Mật khẩu Basic Authentication cho TOÀN BỘ trang web ---
+    auth_basic "Restricted Content";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    # --- Cấu hình cho Single Page Application (SPA) ---
+    location / {
+        # Thử phục vụ file được yêu cầu, sau đó là thư mục, cuối cùng trả về index.html
+        try_files $uri $uri/ /index.html;
+    }
+
+    # --- Cấu hình Backend API ---
+
+    # VỊ TRÍ NGOẠI LỆ: Tắt Basic Auth CHỈ cho endpoint nhận dữ liệu stream
+    # Điều này CỰC KỲ QUAN TRỌNG để AWS Lambda có thể gửi dữ liệu vào.
+    location /api/stream-ingest {
+        auth_basic off; # Tắt yêu cầu mật khẩu cho URL này
+
+        # Chuyển tiếp yêu cầu đến backend Node.js
+        proxy_pass http://localhost:4004;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # VỊ TRÍ CHUNG: Chuyển tiếp tất cả các yêu cầu /api/... khác đến backend
+    # Vị trí này sẽ kế thừa Basic Auth từ server block, do đó nó vẫn được bảo vệ.
+    location /api {
+        proxy_pass http://localhost:4004;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}

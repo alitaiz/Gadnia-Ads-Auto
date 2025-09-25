@@ -238,15 +238,19 @@ export function PPCManagementView() {
                 const response = await fetch('/api/amazon/profiles');
                 if (!response.ok) throw new Error('Failed to fetch profiles.');
                 const data = await response.json();
-                const usProfiles = data.filter((p: Profile) => p.countryCode === 'US');
+                
+                // Filter for the specific profile ID requested by the user.
+                const specificProfile = data.filter((p: Profile) => p.profileId.toString() === '1706448923803665');
 
-                setProfiles(usProfiles);
-                if (usProfiles.length > 0) {
-                    const storedProfileId = localStorage.getItem('selectedProfileId');
-                    const profileIdToSet = storedProfileId && usProfiles.find((p: Profile) => p.profileId.toString() === storedProfileId) 
-                        ? storedProfileId 
-                        : usProfiles[0].profileId.toString();
+                setProfiles(specificProfile);
+                if (specificProfile.length > 0) {
+                    // Automatically select the one available profile.
+                    const profileIdToSet = specificProfile[0].profileId.toString();
                     setSelectedProfileId(profileIdToSet);
+                } else {
+                    // Handle case where the specific profile is not found
+                    console.warn("The specified profile '1706448923803665' was not found in the fetched profiles.");
+                    setProfiles([]); // Ensure profiles list is empty
                 }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -719,7 +723,7 @@ export function PPCManagementView() {
                  <div style={styles.controlGroup}>
                     <label htmlFor="profile-select" style={{ fontWeight: 500 }}>Profile:</label>
                     <select id="profile-select" style={styles.profileSelector} value={selectedProfileId || ''} onChange={(e) => setSelectedProfileId(e.target.value)} disabled={loading.profiles || profiles.length === 0}>
-                        {loading.profiles ? <option>Loading...</option> : profiles.length > 0 ? profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileId} ({p.countryCode})</option>) : <option>No US profiles</option>}
+                        {loading.profiles ? <option>Loading...</option> : profiles.length > 0 ? profiles.map(p => <option key={p.profileId} value={p.profileId}>{p.profileId} ({p.countryCode})</option>) : <option>Profile not found</option>}
                     </select>
                 </div>
                  <div style={styles.controlGroup}>
